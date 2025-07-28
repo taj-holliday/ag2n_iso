@@ -43,7 +43,6 @@ impl fmt::Debug for NodeData {
 
 pub fn complete_graph_gen(dim: usize) {
     let mut id_map = BiBTreeMap::<CanonLabeling, usize>::new();
-    let display_map = BTreeMap::<usize, NodeData>::new();
     let mut map = BTreeMap::<usize, BTreeSet<usize>>::new();
 
     let first = DependencyPartition::from_dim(0);
@@ -73,7 +72,9 @@ pub fn complete_graph_gen(dim: usize) {
             let _ = writeln!(
                 file,
                 "{:?}\n\n{:?}\n",
-                NodeData::new(set, *id_map.get_by_left(&CanonLabeling::from(set)).unwrap()),
+                display_map
+                    .get(id_map.get_by_left(&CanonLabeling::from(set)).unwrap())
+                    .unwrap(),
                 set
             )
             .inspect_err(|err| println!("{err:#?}"));

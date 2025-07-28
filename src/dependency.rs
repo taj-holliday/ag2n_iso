@@ -1,16 +1,7 @@
 use itertools::Itertools;
 use std::fmt;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Dependency {
-    pub id: usize,
-}
-
-impl From<usize> for Dependency {
-    fn from(id: usize) -> Self {
-        Self { id }
-    }
-}
+pub type Dependency = usize;
 
 // NOTE: this relies on spanning dependencies having IDs between 0 and 63
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -19,18 +10,20 @@ pub struct DependencySet {
 }
 
 impl DependencySet {
+    pub const EMPTY: Self = Self { deps: 0 };
+
     pub fn empty() -> Self {
         Self { deps: 0 }
     }
 
     pub fn insert(&mut self, dep: Dependency) {
-        assert!((self.deps >> dep.id) % 2 == 0);
+        assert!((self.deps >> dep) % 2 == 0);
 
-        self.deps |= 1 << dep.id
+        self.deps |= 1 << dep
     }
 
     pub fn contains(&self, dep: &Dependency) -> bool {
-        (self.deps >> dep.id) % 2 == 1
+        (self.deps >> dep) % 2 == 1
     }
 
     pub fn copy_with(&self, addend: Dependency) -> Self {
@@ -50,11 +43,7 @@ impl FromIterator<Dependency> for DependencySet {
 
 impl fmt::Debug for DependencySet {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{:?}",
-            (*self).into_iter().map(|dep| dep.id).collect_vec()
-        )
+        write!(f, "{:?}", (*self).into_iter().collect_vec())
     }
 }
 
@@ -84,28 +73,13 @@ impl Iterator for DependencySetIter {
                 return None;
             }
 
-            if self.set.contains(&Dependency::from(self.index as usize)) {
+            if self.set.contains(&(self.index as usize)) {
                 let index = self.index as usize;
                 self.index += 1;
                 return Some(index.into());
             }
 
             self.index += 1;
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct DependencyCell {
-    pub spanning_deps: DependencySet,
-    pub is_basis: bool,
-}
-
-impl DependencyCell {
-    pub fn new(is_basis: bool) -> Self {
-        Self {
-            spanning_deps: DependencySet::empty(),
-            is_basis,
         }
     }
 }
