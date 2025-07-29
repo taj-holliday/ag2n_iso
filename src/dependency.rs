@@ -12,10 +12,6 @@ pub struct DependencySet {
 impl DependencySet {
     pub const EMPTY: Self = Self { deps: 0 };
 
-    pub fn empty() -> Self {
-        Self { deps: 0 }
-    }
-
     pub fn insert(&mut self, dep: Dependency) {
         assert!((self.deps >> dep) % 2 == 0);
 
@@ -35,7 +31,7 @@ impl DependencySet {
 
 impl FromIterator<Dependency> for DependencySet {
     fn from_iter<T: IntoIterator<Item = Dependency>>(iter: T) -> Self {
-        let mut new = Self::empty();
+        let mut new = Self::EMPTY;
         iter.into_iter().for_each(|dep| new.insert(dep));
         new
     }

@@ -1,3 +1,6 @@
+//! This module provides a representation of a dependency partition with methods
+//! to incrementally generate partitions and determine affine equivalence.
+
 use crate::{
     dependency::{Dependency, DependencySet},
     nauty::{self, CanonLabeling, OPTIONS},
@@ -17,49 +20,46 @@ type DependencySpec = DependencySet;
 type CombDependency = DependencySet;
 
 /// Describes the vectors of a dependency cell.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+///
+/// This is done in terms of the number of basis vectors and the number of
+/// 'comb' vectors contained within it. 'comb' is short for combination, so
+/// `comb_count` gives the number of vectors which are affine combinations of
+/// the basis vectors.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CellData {
-    vec_count: usize,
-    basis_count: usize,
+    pub comb_count: usize,
+    pub basis_count: usize,
 }
 
 impl CellData {
-    /// Gives the number of vectors in the cell
-    pub fn vec_count(&self) -> usize {
-        self.vec_count
-    }
-
-    /// Gives the number of basis vectors in the cell
-    pub fn basis_count(&self) -> usize {
-        self.basis_count
-    }
-
-    pub fn add_non_basis_vecs(&mut self, count: usize) {
-        self.vec_count += count;
-    }
-
-    pub fn add_basis_vecs(&mut self, count: usize) {
-        self.basis_count += count;
-        self.vec_count += count;
-    }
-
-    pub fn remove_basis_vecs(&mut self, count: usize) {
-        self.basis_count -= count;
-        self.vec_count -= count;
-    }
-
-    pub fn basis(vec_count: usize) -> Self {
+    pub fn new(comb_count: usize, basis_count: usize) -> Self {
         Self {
-            vec_count,
-            basis_count: vec_count,
+            comb_count,
+            basis_count,
         }
     }
 
-    pub fn non_basis(vec_count: usize) -> Self {
+    /// Generates a new `CellData` instance with `basis_count` basis vectors and
+    /// no comb vectors.
+    pub fn basis(basis_count: usize) -> Self {
         Self {
-            vec_count,
+            comb_count: 0,
+            basis_count,
+        }
+    }
+
+    /// Generates a new `CellData` instance with `comb_count` comb vectors and
+    /// no basis vectors.
+    pub fn comb(comb_count: usize) -> Self {
+        Self {
+            comb_count,
             basis_count: 0,
         }
+    }
+
+    /// Gives the total number of vectors of the cell.
+    pub fn vec_count(&self) -> usize {
+        self.basis_count + self.comb_count
     }
 }
 
@@ -95,12 +95,16 @@ impl CellData {
 /// Note that this means that our dependency specifications are all created from
 /// a set of spanning dependencies.
 ///
-/// To explain which set, note that `CellData`
-/// has a field giving the number of basis elements of a cell. This implies that
-/// each `DependencyPartition` has a basis, which is correct. Then given a basis
-/// `B = { b_1, ..., b_n }` of `V` with `D = V \ B`, it's true that the set `S`
-/// of dependencies with exactly one element of `D` in them spans all
-/// dependencies of `V`. For this program we have chosen the set `S`.
+/// To explain which set of spanning dependencies, note that `CellData` has a
+/// field giving the number of basis elements of a cell. This implies that each
+/// `DependencyPartition` has a basis, which is correct. Then given a basis `B =
+/// { b_1, ..., b_n }` of `V` with `D = V \ B`, it's true that the set `S` of
+/// dependencies with exactly one element of `D` in them spans all dependencies
+/// of `V`. For this program we have chosen the set `S`.
+///
+/// Finally, note that `CombDependency` is a type alias for `DependencySet`.
+/// This is because each `CombDependency` stores the subset of our spanning
+/// dependencies which sum to it.
 ///
 /// # Use
 /// This struct provides methods which allow you to incrementally generate at
@@ -122,8 +126,13 @@ impl CellData {
 /// Here we generate all affine equivalence classes of dimension `4`.
 ///
 /// ```
+/// use ag2n_iso::dependency_partition::DependencyPartition;
+/// use std::collections::HashSet;
+///
+/// let dim = 4;
+///
 /// let mut acc = HashSet::new();
-/// let mut sets = HashSet::from_iter([DependencyPartition::from_dim(4)]);
+/// let mut sets = HashSet::<DependencyPartition>::from_iter([DependencyPartition::from_dim(dim)]);
 ///
 /// while !sets.is_empty() {
 ///     acc.extend(sets.clone());
@@ -135,7 +144,6 @@ impl CellData {
 ///                 .step_by(2)
 ///                 .flat_map(|odd| set.add_possible_deps(odd))
 ///         })
-///         .filter(|set| filter(set))
 ///         .collect();
 /// }
 ///
@@ -242,7 +250,7 @@ impl DependencyPartition {
     pub fn basis_len(&self) -> usize {
         self.cells
             .iter()
-            .map(|(_, (cell_data, _))| cell_data.basis_count())
+            .map(|(_, (cell_data, _))| cell_data.basis_count)
             .sum()
     }
 
@@ -268,7 +276,7 @@ impl DependencyPartition {
         let spec = DependencySpec::EMPTY;
         self.cells
             .entry(spec)
-            .and_modify(|(cell_data, _)| cell_data.add_basis_vecs(1))
+            .and_modify(|(cell_data, _)| cell_data.basis_count += 1)
             .or_insert((CellData::basis(1), BTreeSet::new()));
     }
 
@@ -297,14 +305,14 @@ impl DependencyPartition {
         let basis = self
             .cells
             .iter()
-            .filter(|(_, (cell_data, _))| cell_data.basis_count() > 0)
+            .filter(|(_, (cell_data, _))| cell_data.basis_count > 0)
             .collect_vec();
 
         // Take all partitions of elements among the dependency cells of the basis
         RestrictedPartitionIterator::new(
             basis
                 .iter()
-                .map(|(_, (cell_data, _))| cell_data.basis_count())
+                .map(|(_, (cell_data, _))| cell_data.basis_count)
                 .collect_vec(),
             size,
         )
@@ -393,7 +401,7 @@ impl DependencyPartition {
         for (spec, dep_count) in &dep {
             let (cell_data, comb_deps) = self.cells.get_mut(spec).unwrap();
             let comb_deps = comb_deps.clone();
-            cell_data.remove_basis_vecs(*dep_count);
+            cell_data.basis_count -= *dep_count;
 
             if cell_data.vec_count() == 0 {
                 self.cells.remove(spec);
@@ -409,8 +417,8 @@ impl DependencyPartition {
         let spec = DependencySpec::from_iter([dep_marker]);
         self.cells
             .entry(spec)
-            .and_modify(|(cell_data, _)| cell_data.add_non_basis_vecs(1))
-            .or_insert((CellData::non_basis(1), BTreeSet::new()));
+            .and_modify(|(cell_data, _)| cell_data.comb_count += 1)
+            .or_insert((CellData::comb(1), BTreeSet::new()));
 
         // Update spanning dependency counts
         self.spanning_dep_counts.insert(
@@ -509,7 +517,7 @@ impl From<&DependencyPartition> for nauty::DenseGraph {
             .map(|(cell_data, _)| cell_data.vec_count())
             .sum::<usize>()
             + spanning_dep_count
-            + value.comb_dep_counts.iter().count();
+            + comb_dep_count;
         let set_word_count = SETWORDSNEEDED(vertex_count);
         let mut graph = empty_graph(set_word_count, vertex_count);
 
@@ -521,12 +529,12 @@ impl From<&DependencyPartition> for nauty::DenseGraph {
                 .map(|(i, spanning_dep)| (*spanning_dep, i)),
         );
 
-        let comb_dep_indices = HashMap::<&DependencySet, usize>::from_iter(
+        let comb_dep_indices = HashMap::<DependencySet, usize>::from_iter(
             value
                 .comb_dep_counts
                 .keys()
                 .enumerate()
-                .map(|(i, comb_dep)| (comb_dep, i + spanning_dep_count)),
+                .map(|(i, comb_dep)| (*comb_dep, i + spanning_dep_count)),
         );
 
         let mut cell_i = spanning_dep_count + comb_dep_count;
@@ -545,7 +553,7 @@ impl From<&DependencyPartition> for nauty::DenseGraph {
                     ADDONEEDGE(
                         &mut graph,
                         cell_i + vec_i,
-                        *comb_dep_indices.get(&comb_dep).unwrap(),
+                        *comb_dep_indices.get(comb_dep).unwrap(),
                         set_word_count,
                     );
                 }
@@ -577,7 +585,7 @@ impl Debug for DependencyPartition {
         // Sort the cells nicely
         let mut cells = self.cells.iter().collect_vec();
         cells.sort_by(|(spec1, (cell_data1, _)), (spec2, (cell_data2, _))| {
-            let ord = cell_data2.basis_count().cmp(&cell_data1.basis_count());
+            let ord = cell_data2.basis_count.cmp(&cell_data1.basis_count);
             if ord == Ordering::Equal {
                 let mut deps = spec1.into_iter().chain(**spec2).unique().collect_vec();
                 deps.sort();
@@ -668,7 +676,7 @@ impl Debug for DependencyPartition {
         // Print markers for basis elements
         for (_, (cell_data, _)) in &cells {
             for i in 0..cell_data.vec_count() {
-                if i < cell_data.basis_count() {
+                if i < cell_data.basis_count {
                     write!(f, "▏BA ")?;
                 } else {
                     write!(f, "▏   ")?;
@@ -879,7 +887,6 @@ impl Debug for DependencyPartition {
 }
 */
 
-/*
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -888,12 +895,7 @@ mod tests {
 
     #[test]
     fn spanning_dependency_set() {
-        let set = DependencySet::from_iter([
-            Dependency::from(1),
-            Dependency::from(5),
-            Dependency::from(7),
-            Dependency::from(25),
-        ]);
+        let set = DependencySet::from_iter([1, 5, 7, 25]);
 
         assert_eq!(
             set.deps,
@@ -901,10 +903,10 @@ mod tests {
         );
 
         let mut iter = set.into_iter();
-        assert_eq!(iter.next(), Some(1.into()));
-        assert_eq!(iter.next(), Some(5.into()));
-        assert_eq!(iter.next(), Some(7.into()));
-        assert_eq!(iter.next(), Some(25.into()));
+        assert_eq!(iter.next(), Some(1));
+        assert_eq!(iter.next(), Some(5));
+        assert_eq!(iter.next(), Some(7));
+        assert_eq!(iter.next(), Some(25));
     }
 
     #[test]
@@ -915,8 +917,8 @@ mod tests {
                 cell_rep,
                 DependencyPartition {
                     cells: BTreeMap::from_iter([(
-                        DependencySpec::new(true),
-                        (n + 1, BTreeSet::new())
+                        DependencySpec::EMPTY,
+                        (CellData::basis(n + 1), BTreeSet::new())
                     )]),
                     spanning_dep_counts: HashMap::new(),
                     comb_dep_counts: HashMap::new(),
@@ -928,7 +930,7 @@ mod tests {
     #[test]
     fn cell_rep_add_dependency() {
         let mut cell_rep = DependencyPartition::from_dim(5);
-        cell_rep.add_dep(BTreeSet::from_iter([(&DependencySpec::new(true), 3)]));
+        cell_rep.add_dep(BTreeSet::from_iter([(&DependencySpec::EMPTY, 3)]));
 
         // |__|__|__|  |  |  |__|
         // |1 |2 |3 |4 |5 |6 |7 |
@@ -938,34 +940,14 @@ mod tests {
             cell_rep.cells,
             BTreeMap::from_iter([
                 (
-                    DependencySpec {
-                        spanning_deps: DependencySet::from_iter([Dependency::from(1)]),
-                        is_basis: false,
-                    },
-                    (1, BTreeSet::new()),
+                    DependencySpec::from_iter([0]),
+                    (CellData::new(1, 3), BTreeSet::new())
                 ),
-                (
-                    DependencySpec {
-                        spanning_deps: DependencySet::from_iter([Dependency::from(1)]),
-                        is_basis: true,
-                    },
-                    (3, BTreeSet::new()),
-                ),
-                (
-                    DependencySpec {
-                        spanning_deps: DependencySet::empty(),
-                        is_basis: true,
-                    },
-                    (3, BTreeSet::new()),
-                ),
+                (DependencySpec::EMPTY, (CellData::basis(3), BTreeSet::new())),
             ])
         );
 
-        assert_eq!(
-            cell_rep.spanning_dep_counts,
-            HashMap::from_iter([(Dependency::from(1), 4)])
-        );
-
+        assert_eq!(cell_rep.spanning_dep_counts, HashMap::from_iter([(0, 4)]));
         assert_eq!(cell_rep.comb_dep_counts, HashMap::new());
 
         // spanning:
@@ -977,108 +959,43 @@ mod tests {
         // | basis           | not basis
 
         cell_rep.add_dep(BTreeSet::from_iter([
-            (
-                &DependencySpec {
-                    spanning_deps: DependencySet::from_iter([Dependency::from(1)]),
-                    is_basis: true,
-                },
-                2,
-            ),
-            (
-                &DependencySpec {
-                    spanning_deps: DependencySet::empty(),
-                    is_basis: true,
-                },
-                1,
-            ),
+            (&DependencySpec::from_iter([0]), 2),
+            (&DependencySpec::EMPTY, 1),
         ]));
 
         assert_eq!(
             cell_rep.cells,
             BTreeMap::from_iter([
                 (
-                    DependencySpec {
-                        spanning_deps: DependencySet::from_iter([Dependency::from(1)]),
-                        is_basis: false,
-                    },
+                    DependencySpec::from_iter([0]),
                     (
-                        1,
-                        BTreeSet::from_iter([DependencySet::from_iter([
-                            Dependency::from(1),
-                            Dependency::from(2)
-                        ])])
-                    ),
+                        CellData::new(1, 1),
+                        BTreeSet::from_iter([CombDependency::from_iter([0, 1])])
+                    )
                 ),
                 (
-                    DependencySpec {
-                        spanning_deps: DependencySet::from_iter([Dependency::from(2)]),
-                        is_basis: false,
-                    },
+                    DependencySpec::from_iter([1]),
                     (
-                        1,
-                        BTreeSet::from_iter([DependencySet::from_iter([
-                            Dependency::from(1),
-                            Dependency::from(2)
-                        ])])
-                    ),
+                        CellData::new(1, 1),
+                        BTreeSet::from_iter([CombDependency::from_iter([0, 1])])
+                    )
                 ),
                 (
-                    DependencySpec {
-                        spanning_deps: DependencySet::from_iter([Dependency::from(1)]),
-                        is_basis: true,
-                    },
-                    (
-                        1,
-                        BTreeSet::from_iter([DependencySet::from_iter([
-                            Dependency::from(1),
-                            Dependency::from(2)
-                        ])])
-                    ),
+                    DependencySpec::from_iter([0, 1]),
+                    (CellData::basis(2), BTreeSet::new())
                 ),
-                (
-                    DependencySpec {
-                        spanning_deps: DependencySet::from_iter([Dependency::from(2)]),
-                        is_basis: true,
-                    },
-                    (
-                        1,
-                        BTreeSet::from_iter([DependencySet::from_iter([
-                            Dependency::from(1),
-                            Dependency::from(2)
-                        ])])
-                    ),
-                ),
-                (
-                    DependencySpec {
-                        spanning_deps: DependencySet::from_iter([
-                            Dependency::from(1),
-                            Dependency::from(2)
-                        ]),
-                        is_basis: true,
-                    },
-                    (2, BTreeSet::new()),
-                ),
-                (
-                    DependencySpec {
-                        spanning_deps: DependencySet::empty(),
-                        is_basis: true,
-                    },
-                    (2, BTreeSet::new()),
-                ),
+                (DependencySpec::EMPTY, (CellData::basis(2), BTreeSet::new()))
             ])
         );
 
         assert_eq!(
             cell_rep.spanning_dep_counts,
-            HashMap::from_iter([(Dependency::from(1), 4), (Dependency::from(2), 4)])
+            HashMap::from_iter([(0, 4), (1, 4)])
         );
 
         assert_eq!(
             cell_rep.comb_dep_counts,
-            HashMap::from_iter([(
-                DependencySet::from_iter([Dependency::from(1), Dependency::from(2)]),
-                4
-            )])
+            HashMap::from_iter([(DependencySet::from_iter([0, 1]), 4)])
         );
     }
 
@@ -1095,7 +1012,7 @@ mod tests {
                     } else {
                         assert_eq!(
                             possible_deps,
-                            vec![BTreeSet::from_iter([(&DependencySpec::new(true), m)])]
+                            vec![BTreeSet::from_iter([(&DependencySpec::EMPTY, m)])]
                         );
                     }
                 }
@@ -1104,45 +1021,28 @@ mod tests {
 
         {
             let mut cell_rep = DependencyPartition::from_dim(5);
-            cell_rep.add_dep(BTreeSet::from_iter([(&DependencySpec::new(true), 3)]));
+            cell_rep.add_dep(BTreeSet::from_iter([(&DependencySpec::EMPTY, 3)]));
 
             assert!(!cell_rep.possible_deps(3).any(|dep| {
                 BTreeSet::from_iter(dep.into_iter())
-                    == BTreeSet::from_iter([(
-                        &DependencySpec {
-                            spanning_deps: DependencySet::from_iter([Dependency::from(1)]),
-                            is_basis: true,
-                        },
-                        3,
-                    )])
+                    == BTreeSet::from_iter([(&DependencySpec::from_iter([0]), 3)])
             }));
         }
 
         {
             let mut cell_rep = DependencyPartition::from_dim(6);
-            cell_rep.add_dep(BTreeSet::from_iter([(&DependencySpec::new(true), 3)]));
+            cell_rep.add_dep(BTreeSet::from_iter([(&DependencySpec::EMPTY, 3)]));
             cell_rep.add_dep(BTreeSet::from_iter([
-                (
-                    &DependencySpec {
-                        spanning_deps: DependencySet::from_iter([Dependency::from(1)]),
-                        is_basis: true,
-                    },
-                    2,
-                ),
-                (
-                    &DependencySpec {
-                        spanning_deps: DependencySet::empty(),
-                        is_basis: true,
-                    },
-                    1,
-                ),
+                (&DependencySpec::from_iter([0]), 2),
+                (&DependencySpec::EMPTY, 1),
             ]));
 
             assert!(
                 !cell_rep
                     .possible_deps(5)
                     .any(|dep: BTreeSet<(&DependencySpec, usize)>| {
-                        dep.iter().any(|(cell, _)| !cell.is_basis)
+                        dep.iter()
+                            .any(|(spec, _)| !(cell_rep.cells.get(spec).unwrap().0.basis_count > 0))
                     })
             );
         }
@@ -1168,7 +1068,7 @@ mod tests {
         }
 
         let mut cell_rep = DependencyPartition::from_dim(6);
-        cell_rep.add_dep(BTreeSet::from_iter([(&DependencySpec::new(true), 3)]));
+        cell_rep.add_dep(BTreeSet::from_iter([(&DependencySpec::EMPTY, 3)]));
         let dense_graph = nauty::DenseGraph::from(&cell_rep);
 
         // Dimension + 1 and the one dependency
@@ -1192,4 +1092,3 @@ mod tests {
         );
     }
 }
-*/

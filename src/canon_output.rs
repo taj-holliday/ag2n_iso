@@ -20,7 +20,7 @@ impl From<&DependencyPartition> for CanonPartition {
         let mut dep_map = BTreeMap::new();
 
         for vec_i in (dep_count..labeling.vertex_count).map(|i| i * labeling.set_word_count) {
-            let mut deps = DependencySet::empty();
+            let mut deps = DependencySet::EMPTY;
 
             for num_i in 0..SETWORDSNEEDED(dep_count) {
                 for bit_i in 0..WORDSIZE as usize {
