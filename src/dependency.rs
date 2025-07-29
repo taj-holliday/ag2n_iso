@@ -1,12 +1,18 @@
 use itertools::Itertools;
 use std::fmt;
 
+/// Dependencies are represented by integers which uniquely identify them.
+///
+/// This is a result of how `DependencyPartition` works.
 pub type Dependency = usize;
 
-// NOTE: this relies on spanning dependencies having IDs between 0 and 63
+/// A set of dependencies.
+///
+/// For performance, the set is stored in a single `u64`. This allows storage of
+/// any combination of dependencies between 0 and 63.
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DependencySet {
-    pub deps: u64,
+    deps: u64,
 }
 
 impl DependencySet {
@@ -55,6 +61,7 @@ impl IntoIterator for DependencySet {
     }
 }
 
+/// An iterator over a `DependencySet`.
 pub struct DependencySetIter {
     set: DependencySet,
     index: u8,

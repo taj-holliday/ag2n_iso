@@ -16,8 +16,19 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-type DependencySpec = DependencySet;
-type CombDependency = DependencySet;
+/// A dependency specification.
+///
+/// Because partitions generated with a spanning set of dependencies are the
+/// same as partitions generated with the full linear subspace of dependencies,
+/// this program only fills dependency specifications with dependencies from a
+/// spanning set. To learn more, look at the docs for `DependencyPartition`.
+pub type DependencySpec = DependencySet;
+
+/// A linear combination of dependencies.
+///
+/// Instead of storing the dependency itself, we store the set of dependencies
+/// which sum to this one.
+pub type CombDependency = DependencySet;
 
 /// Describes the vectors of a dependency cell.
 ///
@@ -701,192 +712,6 @@ impl Debug for DependencyPartition {
     }
 }
 
-/* alternate version with extended type
-impl Debug for DependencyPartition {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
-        let mut cells = self.cells.iter().collect_vec();
-        cells.sort_by(|(b1, _), (b2, _)| {
-            let ord = b2.is_basis.cmp(&b1.is_basis);
-            if ord == Ordering::Equal {
-                let mut deps = b1
-                    .spanning_deps
-                    .into_iter()
-                    .chain(b2.spanning_deps.into_iter())
-                    .unique()
-                    .collect_vec();
-                deps.sort();
-
-                for dep in deps {
-                    let ord = b2
-                        .spanning_deps
-                        .contains(&dep)
-                        .cmp(&b1.spanning_deps.contains(&dep));
-
-                    if ord != Ordering::Equal {
-                        return ord;
-                    }
-                }
-
-                Ordering::Equal
-            } else {
-                ord
-            }
-        });
-
-        let mut spanning_dep_counts = self.spanning_dep_counts.iter().collect_vec();
-        spanning_dep_counts.sort();
-
-        //
-
-        let mut format = String::new();
-        let mut out = String::new();
-        let mut deps = vec![];
-
-        let alphabet = "abcdefghijklmnopqrstuvwxyz";
-        for (dep, count) in &spanning_dep_counts {
-            let label = alphabet.chars().nth(dep.id).unwrap();
-
-            format.push(label);
-            out.push_str(&(*count - 1).to_string());
-
-            format.push('-');
-            out.push('-');
-
-            deps.push((label, dep));
-        }
-
-        if deps.len() > 1 {
-            format.push('(');
-            out.push('(');
-
-            for comb in (2..=deps.len()).flat_map(|len| deps.iter().combinations(len)) {
-                let mut count = 0;
-
-                for (label, _) in &comb {
-                    format.push(*label);
-                }
-
-                for (cell, (cell_count, _)) in &self.cells {
-                    let mut pass = true;
-                    for (_, dep) in &comb {
-                        if !cell.spanning_deps.contains(dep) {
-                            pass = false;
-                            break;
-                        }
-                    }
-
-                    if pass {
-                        count += cell_count;
-                    }
-                }
-
-                out.push_str(&count.to_string());
-
-                format.push('-');
-                out.push('-');
-            }
-
-            format.pop();
-            out.pop();
-
-            format.push(')');
-            out.push(')');
-        } else {
-            format.pop();
-            out.pop();
-        }
-
-        writeln!(f, "{format}\n{out}")?;
-
-        //
-
-        for (dep, _) in &spanning_dep_counts {
-            for (cell, (count, _)) in &cells {
-                if cell.spanning_deps.contains(dep) {
-                    for _ in 0..*count {
-                        write!(f, "▏▂▂ ")?;
-                    }
-                } else {
-                    for _ in 0..*count {
-                        write!(f, "▏   ")?;
-                    }
-                }
-            }
-            writeln!(f, "▏{}", alphabet.chars().nth(dep.id).unwrap())?;
-        }
-
-        /*
-        let mut comb_dep_counts = self.comb_dep_counts.keys().collect_vec();
-        comb_dep_counts.sort_by(|comb1, comb2| {
-            let vec1 = comb1.into_iter().collect_vec();
-            let vec2 = comb2.into_iter().collect_vec();
-
-            let ordering = vec1.len().cmp(&vec2.len());
-            if ordering != Ordering::Equal {
-                return ordering;
-            }
-
-            let mut combined = vec1.iter().chain(vec2.iter()).unique().collect_vec();
-            combined.sort();
-
-            for dep in combined {
-                let ordering = vec2.contains(dep).cmp(&vec1.contains(dep));
-                if ordering != Ordering::Equal {
-                    return ordering;
-                }
-            }
-
-            Ordering::Equal
-        });
-
-        for dep in comb_dep_counts {
-            for (_, (count, comb_deps)) in &cells {
-                if comb_deps.contains(dep) {
-                    for _ in 0..*count {
-                        write!(f, "▏▂▂ ")?;
-                    }
-                } else {
-                    for _ in 0..*count {
-                        write!(f, "▏   ")?;
-                    }
-                }
-            }
-
-            write!(f, "▏")?;
-
-            let mut ids = dep.into_iter().map(|dep| dep.id).collect_vec();
-            ids.sort();
-
-            write!(f, "{}", alphabet.chars().nth(ids[0]).unwrap())?;
-            for id in ids.iter().skip(1) {
-                write!(f, " + {}", alphabet.chars().nth(*id).unwrap())?;
-            }
-            writeln!(f)?;
-        }*/
-
-        for (cell, (count, _)) in &cells {
-            for _ in 0..*count {
-                if cell.is_basis {
-                    write!(f, "▏BA ")?;
-                } else {
-                    write!(f, "▏   ")?;
-                }
-            }
-        }
-        writeln!(f, "▏")?;
-
-        for i in 0..cells.iter().map(|(_, (count, _))| *count).sum() {
-            write!(f, "▏")?;
-            if i < 10 {
-                write!(f, "0")?;
-            }
-            write!(f, "{i} ")?;
-        }
-        write!(f, "▏")
-    }
-}
-*/
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -897,10 +722,13 @@ mod tests {
     fn spanning_dependency_set() {
         let set = DependencySet::from_iter([1, 5, 7, 25]);
 
-        assert_eq!(
-            set.deps,
-            0b00000000_00000000_00000000_00000000_00000010_00000000_00000000_10100010
-        );
+        for i in 0..64 {
+            if i == 1 || i == 5 || i == 7 || i == 25 {
+                assert!(set.contains(&i));
+            } else {
+                assert!(!set.contains(&i));
+            }
+        }
 
         let mut iter = set.into_iter();
         assert_eq!(iter.next(), Some(1));
