@@ -45,7 +45,7 @@ pub fn complete_graph_gen(dim: usize) {
     let mut id_map = BiBTreeMap::<CanonLabeling, usize>::new();
     let mut map = BTreeMap::<usize, BTreeSet<usize>>::new();
 
-    let first = DependencyPartition::from_dim(0);
+    let first = DependencyPartition::basis(0);
     let mut sets = HashSet::<DependencyPartition>::from_iter([first.clone()]);
 
     let mut id = 0;
@@ -162,7 +162,7 @@ pub fn graph_gen(dim: usize) {
 
     let mut id = 0;
 
-    let mut sets = HashSet::<DependencyPartition>::from_iter([DependencyPartition::from_dim(dim)]);
+    let mut sets = HashSet::<DependencyPartition>::from_iter([DependencyPartition::basis(dim)]);
     while !sets.is_empty() {
         println!("{} {}", sets.iter().next().unwrap().vec_count(), sets.len());
 
@@ -239,7 +239,7 @@ pub fn graph_gen(dim: usize) {
 
 pub fn generate(dim: usize, mut filter: impl FnMut(&DependencyPartition) -> bool) {
     let mut acc = HashSet::<DependencyPartition>::new();
-    let mut sets = HashSet::<DependencyPartition>::from_iter([DependencyPartition::from_dim(dim)]);
+    let mut sets = HashSet::<DependencyPartition>::from_iter([DependencyPartition::basis(dim)]);
 
     while !sets.is_empty() {
         println!("{} {}", sets.iter().next().unwrap().vec_count(), sets.len());
@@ -261,7 +261,7 @@ pub fn generate(dim: usize, mut filter: impl FnMut(&DependencyPartition) -> bool
 
 pub fn cap_gen(dim: usize) {
     let mut acc = HashSet::<DependencyPartition>::new();
-    let mut sets = HashSet::<DependencyPartition>::from_iter([DependencyPartition::from_dim(dim)]);
+    let mut sets = HashSet::<DependencyPartition>::from_iter([DependencyPartition::basis(dim)]);
 
     while !sets.is_empty() {
         println!("{} {}", sets.iter().next().unwrap().vec_count(), sets.len());
@@ -283,10 +283,10 @@ pub fn cap_gen(dim: usize) {
 
 pub fn cap_gen_verbose(dim: usize) {
     let mut acc = HashMap::<DependencyPartition, Vec<DependencyPartition>>::from_iter([(
-        DependencyPartition::from_dim(dim),
-        vec![DependencyPartition::from_dim(dim)],
+        DependencyPartition::basis(dim),
+        vec![DependencyPartition::basis(dim)],
     )]);
-    let mut sets = HashSet::<DependencyPartition>::from_iter([DependencyPartition::from_dim(dim)]);
+    let mut sets = HashSet::<DependencyPartition>::from_iter([DependencyPartition::basis(dim)]);
 
     while !sets.is_empty() {
         println!("{} {}", sets.iter().next().unwrap().vec_count(), sets.len());

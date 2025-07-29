@@ -7,9 +7,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         c.bench_with_input(BenchmarkId::new("cap_finder", dim), &dim, |b, dim| {
             b.iter(|| {
                 let mut caps =
-                    HashSet::<DependencyPartition>::from_iter([DependencyPartition::from_dim(
-                        *dim,
-                    )]);
+                    HashSet::<DependencyPartition>::from_iter([DependencyPartition::basis(*dim)]);
 
                 while !caps.is_empty() {
                     caps = caps

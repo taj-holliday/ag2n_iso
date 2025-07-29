@@ -143,7 +143,7 @@ impl CellData {
 /// let dim = 4;
 ///
 /// let mut acc = HashSet::new();
-/// let mut sets = HashSet::<DependencyPartition>::from_iter([DependencyPartition::from_dim(dim)]);
+/// let mut sets = HashSet::<DependencyPartition>::from_iter([DependencyPartition::basis(dim)]);
 ///
 /// while !sets.is_empty() {
 ///     acc.extend(sets.clone());
@@ -170,7 +170,7 @@ pub struct DependencyPartition {
 impl DependencyPartition {
     /// Generates a `DependencyPartition` representing an affinely independent
     /// set of dimension `dim`.
-    pub fn from_dim(dim: usize) -> Self {
+    pub fn basis(dim: usize) -> Self {
         Self {
             cells: BTreeMap::from_iter([(
                 DependencySpec::EMPTY,
@@ -632,7 +632,7 @@ impl Debug for DependencyPartition {
                     }
                 }
             }
-            writeln!(f, "▏{}", dep)?;
+            writeln!(f, "▏{dep}")?;
         }
 
         // (optional) Print the comb deps
@@ -740,7 +740,7 @@ mod tests {
     #[test]
     fn cell_rep_new() {
         for n in 0..10 {
-            let cell_rep = DependencyPartition::from_dim(n);
+            let cell_rep = DependencyPartition::basis(n);
             assert_eq!(
                 cell_rep,
                 DependencyPartition {
@@ -757,7 +757,7 @@ mod tests {
 
     #[test]
     fn cell_rep_add_dependency() {
-        let mut cell_rep = DependencyPartition::from_dim(5);
+        let mut cell_rep = DependencyPartition::basis(5);
         cell_rep.add_dep(BTreeSet::from_iter([(&DependencySpec::EMPTY, 3)]));
 
         // |__|__|__|  |  |  |__|
@@ -832,7 +832,7 @@ mod tests {
         for n in 0..10 {
             for m in 0..10 {
                 {
-                    let cell_rep = DependencyPartition::from_dim(n);
+                    let cell_rep = DependencyPartition::basis(n);
 
                     let possible_deps = cell_rep.possible_deps(m).collect_vec();
                     if n + 1 < m || m == 0 {
@@ -848,7 +848,7 @@ mod tests {
         }
 
         {
-            let mut cell_rep = DependencyPartition::from_dim(5);
+            let mut cell_rep = DependencyPartition::basis(5);
             cell_rep.add_dep(BTreeSet::from_iter([(&DependencySpec::EMPTY, 3)]));
 
             assert!(!cell_rep.possible_deps(3).any(|dep| {
@@ -858,7 +858,7 @@ mod tests {
         }
 
         {
-            let mut cell_rep = DependencyPartition::from_dim(6);
+            let mut cell_rep = DependencyPartition::basis(6);
             cell_rep.add_dep(BTreeSet::from_iter([(&DependencySpec::EMPTY, 3)]));
             cell_rep.add_dep(BTreeSet::from_iter([
                 (&DependencySpec::from_iter([0]), 2),
@@ -879,7 +879,7 @@ mod tests {
     #[test]
     fn dense_graph_from_cell_rep() {
         for n in 0..10 {
-            let dense_graph = nauty::DenseGraph::from(&DependencyPartition::from_dim(n));
+            let dense_graph = nauty::DenseGraph::from(&DependencyPartition::basis(n));
 
             let vertex_count = n + 1;
             let set_word_count = SETWORDSNEEDED(vertex_count);
@@ -895,7 +895,7 @@ mod tests {
             );
         }
 
-        let mut cell_rep = DependencyPartition::from_dim(6);
+        let mut cell_rep = DependencyPartition::basis(6);
         cell_rep.add_dep(BTreeSet::from_iter([(&DependencySpec::EMPTY, 3)]));
         let dense_graph = nauty::DenseGraph::from(&cell_rep);
 

@@ -79,7 +79,7 @@ impl Iterator for DependencySetIter {
             if self.set.contains(&(self.index as usize)) {
                 let index = self.index as usize;
                 self.index += 1;
-                return Some(index.into());
+                return Some(index);
             }
 
             self.index += 1;
