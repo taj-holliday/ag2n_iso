@@ -1,6 +1,6 @@
 # ag2n_iso
 
-Program to find affine equivalence classes in AG(2,n). Heavy WIP.
+Program to find affine equivalence classes in AG(2,8). Heavy WIP.
 
 As an example of what this program can do, below is a graph of all affine equivalence classes of caps in AG(2,n). Each node is an affine equivalence class, each arrow indicates adding a vector, and the label X-YD represents a X-cap of dimension Y.
 
